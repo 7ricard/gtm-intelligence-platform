@@ -11,8 +11,41 @@ load_dotenv()
 client = Anthropic()
 
 
-def score_account(brief: dict) -> dict:
+def _build_enrichment_block(enrichment: dict) -> str:
+    if not enrichment or "error" in enrichment:
+        return ""
+
+    def val(key):
+        v = enrichment.get(key, "unknown")
+        return v if v else "unknown"
+
+    personas_found = enrichment.get("target_personas_found") or []
+    recent_signals = enrichment.get("recent_signals") or []
+
+    lines = [
+        "CONFIRMED ENRICHMENT DATA (authoritative; takes priority over website inference)",
+        f"Funding stage: {val('funding_stage')}",
+        f"Total funding raised: {val('total_funding_raised')}",
+        f"Last round: {val('last_round')}",
+        f"Revenue or ARR estimate: {val('revenue_or_arr_estimate')}",
+        f"Employee count: {val('employee_count')}",
+        f"Founded year: {val('founded_year')}",
+        f"HQ location: {val('hq_location')}",
+        f"Target personas found: {', '.join(personas_found) if personas_found else 'none identified'}",
+        f"Recent signals: {'; '.join(recent_signals) if recent_signals else 'none'}",
+        f"Data confidence: {val('confidence')}",
+        "",
+        "Scoring notes for enrichment-backed dimensions:",
+        "- firmographic_fit: use revenue_or_arr_estimate and employee_count against the $2M to $10M ARR target; fall back to brief inference only where enrichment is 'unknown'.",
+        "- funding_stage: use the confirmed funding_stage against the Series A target; fall back to brief inference only where enrichment is 'unknown'.",
+        "- persona_accessibility: use target_personas_found; score higher when named buyers match Founder, CEO, CRO, Head of GTM, or VP of Sales; fall back to brief inference only where enrichment is 'unknown'.",
+    ]
+    return "\n".join(lines)
+
+
+def score_account(brief: dict, enrichment: dict = None) -> dict:
     personas = ", ".join(ICP["target_personas_in_priority_order"])
+    enrichment_block = _build_enrichment_block(enrichment)
 
     prompt = f"""You are a senior B2B SaaS go-to-market analyst. Score the following account against the Ideal Customer Profile (ICP) rubric below.
 
@@ -29,8 +62,8 @@ ICP Signals: {brief.get("icp_signals", [])}
 Pain Points: {brief.get("pain_points", [])}
 Tech Stack Signals: {brief.get("tech_stack_signals", [])}
 
-SCORING TASK
-Score each of the following six dimensions from 0 to 100 based on how well the account matches the ICP. Use only evidence present in the brief. Where data is missing, score conservatively and state that in the rationale.
+{enrichment_block + chr(10) if enrichment_block else ""}SCORING TASK
+Score each of the following six dimensions from 0 to 100 based on how well the account matches the ICP. Where confirmed enrichment data is provided above, use it as the primary source for the relevant dimensions and fall back to brief inference only for fields marked "unknown". Where no enrichment is available, use only evidence present in the brief and score conservatively where data is missing.
 
 Dimensions to score:
 - firmographic_fit: Company size and ARR match the ICP definition
