@@ -25,6 +25,8 @@ def save_account(data: dict) -> str:
         "tech_stack_signals": data.get("tech_stack_signals"),
         "recommended_angle": data.get("recommended_angle"),
         "icp_tier": data.get("icp_tier"),
+        "icp_score": data.get("icp_score"),
+        "score_breakdown": data.get("score_breakdown"),
         "summary": data.get("summary"),
         "raw_brief": json.dumps(data),
     }
