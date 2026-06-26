@@ -33,6 +33,32 @@ def get_wikidata_data(company_name: str, domain: str) -> dict:
             print("Wikidata: no match")
             return empty
 
+        # QIDs whose P31 (instance-of) values indicate an organization-type entity.
+        ORG_QIDS = {
+            "Q4830453",   # business
+            "Q783794",    # company
+            "Q43229",     # organization
+            "Q6881511",   # enterprise
+            "Q891723",    # public company
+            "Q484652",    # international organization
+            "Q167037",    # corporation
+            "Q1616075",   # limited liability company
+            "Q728646",    # holding company
+            "Q4539",      # startup company
+            "Q161726",    # multinational corporation
+        }
+
+        def _is_org(claims: dict) -> bool:
+            for entry in claims.get("P31", []):
+                val = (
+                    entry.get("mainsnak", {})
+                    .get("datavalue", {})
+                    .get("value", {})
+                )
+                if isinstance(val, dict) and val.get("id", "") in ORG_QIDS:
+                    return True
+            return False
+
         chosen_entity = None
         chosen_qid = None
         confidence = "low"
@@ -46,6 +72,7 @@ def get_wikidata_data(company_name: str, domain: str) -> dict:
                 entity_data = entity_resp.json().get("entities", {}).get(qid, {})
                 claims = entity_data.get("claims", {})
 
+                # Prefer domain match (highest confidence).
                 websites = claims.get("P856", [])
                 for w in websites:
                     url_val = (
@@ -61,21 +88,19 @@ def get_wikidata_data(company_name: str, domain: str) -> dict:
 
                 if chosen_entity:
                     break
+
+                # Accept as a low-confidence fallback only if it is an organization.
+                if chosen_entity is None and _is_org(claims):
+                    chosen_entity = entity_data
+                    chosen_qid = qid
+                    confidence = "low"
+
             except Exception:
                 continue
 
         if not chosen_entity:
-            qid = candidates[0].get("id", "")
-            try:
-                entity_url = f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
-                entity_resp = requests.get(entity_url, headers=headers, timeout=10)
-                entity_resp.raise_for_status()
-                chosen_entity = entity_resp.json().get("entities", {}).get(qid, {})
-                chosen_qid = qid
-                confidence = "low"
-            except Exception:
-                print("Wikidata: no match")
-                return empty
+            print("Wikidata: no match")
+            return empty
 
         claims = chosen_entity.get("claims", {})
 
@@ -203,7 +228,16 @@ def get_sec_data(company_name: str) -> dict:
         name_lower = company_name.lower()
         match = None
         for entry in tickers.values():
-            if name_lower in entry.get("title", "").lower():
+            title_lower = entry.get("title", "").lower()
+            # Require an exact match or a whole-word prefix match to avoid
+            # "vanta" hitting "novanta" or "hex" hitting "paychex".
+            if title_lower == name_lower:
+                match = entry
+                break
+            if title_lower.startswith(name_lower) and (
+                len(title_lower) == len(name_lower)
+                or not title_lower[len(name_lower)].isalpha()
+            ):
                 match = entry
                 break
 
