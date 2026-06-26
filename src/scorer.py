@@ -4,14 +4,14 @@ import re
 from dotenv import load_dotenv
 from anthropic import Anthropic
 
-from src.icp_config import ICP, WEIGHTS, THRESHOLDS
+from src.profiles import get_active_profile
 
 load_dotenv()
 
 client = Anthropic()
 
 
-def _build_enrichment_block(enrichment: dict) -> str:
+def _build_enrichment_block(enrichment: dict, profile: dict) -> str:
     if not enrichment or "error" in enrichment:
         return ""
 
@@ -21,6 +21,10 @@ def _build_enrichment_block(enrichment: dict) -> str:
 
     personas_found = enrichment.get("target_personas_found") or []
     recent_signals = enrichment.get("recent_signals") or []
+
+    arr_range = profile["firmographic"].get("arr_range", "")
+    funding_stage = profile["firmographic"].get("funding_stage", "")
+    personas_list = ", ".join(profile.get("personas", []))
 
     lines = [
         "CONFIRMED ENRICHMENT DATA (authoritative; takes priority over website inference)",
@@ -36,25 +40,60 @@ def _build_enrichment_block(enrichment: dict) -> str:
         f"Data confidence: {val('confidence')}",
         "",
         "Scoring notes for enrichment-backed dimensions:",
-        "- firmographic_fit: use revenue_or_arr_estimate and employee_count against the $2M to $10M ARR target; fall back to brief inference only where enrichment is 'unknown'.",
-        "- funding_stage: use the confirmed funding_stage against the Series A target; fall back to brief inference only where enrichment is 'unknown'.",
-        "- persona_accessibility: use target_personas_found; score higher when named buyers match Founder, CEO, CRO, Head of GTM, or VP of Sales; fall back to brief inference only where enrichment is 'unknown'.",
+        f"- firmographic_fit: use revenue_or_arr_estimate and employee_count against the {arr_range} ARR target; fall back to brief inference only where enrichment is 'unknown'.",
+        f"- funding_stage: use the confirmed funding_stage against the {funding_stage} target; fall back to brief inference only where enrichment is 'unknown'.",
+        f"- persona_accessibility: use target_personas_found; score higher when named buyers match {personas_list}; fall back to brief inference only where enrichment is 'unknown'.",
     ]
     return "\n".join(lines)
 
 
 def score_account(brief: dict, enrichment: dict = None) -> dict:
-    personas = ", ".join(ICP["target_personas_in_priority_order"])
-    enrichment_block = _build_enrichment_block(enrichment)
+    profile = get_active_profile()
+    weights = profile["weights"]
+    thresholds = profile["thresholds"]
+
+    firmographic = profile["firmographic"]
+    verticals = ", ".join(firmographic.get("verticals", []))
+    arr_range = firmographic.get("arr_range", "")
+    funding_stage = firmographic.get("funding_stage", "")
+    business_model = firmographic.get("business_model", "")
+    geographies = ", ".join(firmographic.get("geographies", [])) or "any"
+    employee_range = firmographic.get("employee_range", "") or "not specified"
+
+    technographic = profile["technographic"]
+    target_stack = ", ".join(technographic.get("target_stack", [])) or "none specified"
+    competitors = ", ".join(technographic.get("competitors_to_displace", [])) or "none specified"
+
+    personas = ", ".join(profile.get("personas", []))
+    positive_signals = ", ".join(profile.get("positive_signals", []))
+
+    negative_icp = profile.get("negative_icp", {})
+    exclude_verticals = ", ".join(negative_icp.get("exclude_verticals", [])) or "none"
+    exclude_stages = ", ".join(negative_icp.get("exclude_stages", [])) or "none"
+    exclude_descriptors = ", ".join(negative_icp.get("exclude_descriptors", [])) or "none"
+
+    enrichment_block = _build_enrichment_block(enrichment, profile)
 
     prompt = f"""You are a senior B2B SaaS go-to-market analyst. Score the following account against the Ideal Customer Profile (ICP) rubric below.
 
 ICP DEFINITION
-Definition: {ICP["definition"]}
-Target ARR: {ICP["target_arr"]}
-Target Stage: {ICP["target_stage"]}
-Target Vertical: {ICP["target_vertical"]}
+Verticals: {verticals}
+Business model: {business_model}
+Target ARR: {arr_range}
+Target Stage: {funding_stage}
+Geographies: {geographies}
+Employee range: {employee_range}
 Target Personas (in priority order): {personas}
+Positive signals: {positive_signals}
+Target stack: {target_stack}
+Competitors to displace: {competitors}
+
+NEGATIVE ICP DISQUALIFIERS
+Excluded verticals: {exclude_verticals}
+Excluded stages: {exclude_stages}
+Excluded descriptors: {exclude_descriptors}
+
+If the account clearly matches any disqualifier above, heavily penalize firmographic_fit (score it 10 or below) and note the specific disqualifier in that dimension's rationale.
 
 ACCOUNT BRIEF
 Summary: {brief.get("summary", "")}
@@ -68,8 +107,8 @@ Score each of the following six dimensions from 0 to 100 based on how well the a
 Dimensions to score:
 - firmographic_fit: Company size and ARR match the ICP definition
 - buying_signals: Evidence of active growth, hiring, or tooling investment
-- funding_stage: Funding round aligns with the target stage (Series A)
-- industry_fit: Vertical matches B2B SaaS focus
+- funding_stage: Funding round aligns with the target stage ({funding_stage})
+- industry_fit: Vertical matches {verticals} focus
 - technographic_fit: Tech stack suggests compatibility with our solution
 - persona_accessibility: Target personas are reachable and visible at the company
 
@@ -100,7 +139,7 @@ Return ONLY raw JSON with no markdown and no code fences, mapping each dimension
     breakdown = []
     total = 0.0
 
-    for dimension, weight in WEIGHTS.items():
+    for dimension, weight in weights.items():
         entry = scores.get(dimension, {})
         score = int(entry.get("score", 0))
         rationale = entry.get("rationale", "")
@@ -116,11 +155,11 @@ Return ONLY raw JSON with no markdown and no code fences, mapping each dimension
 
     overall = round(total)
 
-    if overall >= THRESHOLDS["A+"]:
+    if overall >= thresholds["A+"]:
         tier = "A+"
-    elif overall >= THRESHOLDS["A"]:
+    elif overall >= thresholds["A"]:
         tier = "A"
-    elif overall >= THRESHOLDS["B"]:
+    elif overall >= thresholds["B"]:
         tier = "B"
     else:
         tier = "C"

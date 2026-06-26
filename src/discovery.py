@@ -7,7 +7,7 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 from tavily import TavilyClient
 
-from src.icp_config import ICP
+from src.profiles import get_active_profile
 
 load_dotenv()
 
@@ -30,21 +30,31 @@ def _parse_json(text: str):
 
 
 def generate_discovery_queries(focus: str = None) -> list:
+    profile = get_active_profile()
+    firmographic = profile["firmographic"]
+    verticals = ", ".join(firmographic.get("verticals", []))
+    arr_range = firmographic.get("arr_range", "")
+    funding_stage = firmographic.get("funding_stage", "")
+    geographies = ", ".join(firmographic.get("geographies", [])) or "any"
+    positive_signals = ", ".join(profile.get("positive_signals", []))
+
     focus_line = f"Additional focus: {focus}" if focus else ""
-    prompt = f"""You are a B2B SaaS market researcher. Generate about 5 targeted web search queries that will surface recently announced, small Series A funding rounds for obscure or emerging B2B SaaS startups.
+    prompt = f"""You are a B2B SaaS market researcher. Generate about 5 targeted web search queries that will surface recently announced funding rounds for obscure or emerging startups matching this ICP.
 
 ICP:
-- Stage: {ICP["target_stage"]}
-- Vertical: {ICP["target_vertical"]}
-- ARR range: {ICP["target_arr"]}
+- Stage: {funding_stage}
+- Verticals: {verticals}
+- ARR range: {arr_range}
+- Geographies: {geographies}
+- Positive signals to surface: {positive_signals}
 {focus_line}
 
 QUERY GUIDELINES
-- Favor recently announced Series A rounds with small dollar amounts, for example "$3 million Series A", "$5 million Series A B2B SaaS", "$8 million Series A startup 2024".
+- Favor recently announced rounds with small dollar amounts, for example "$3 million Series A", "$5 million Series A B2B SaaS", "$8 million Series A startup 2024".
 - Target trade press sources that cover small rounds: TechCrunch, Axios Pro Rata, Business Wire, PR Newswire, Crunchbase News.
 - Include year references (2024, 2025) to bias toward recent announcements.
 - Vary the vertical angle, for example fintech, devtools, HR tech, vertical SaaS, security.
-- Do NOT generate "top SaaS companies", "best SaaS tools", or any ranking or list-style queries. Those surface large, well-known companies, not emerging Series A startups.
+- Do NOT generate "top SaaS companies", "best SaaS tools", or any ranking or list-style queries. Those surface large, well-known companies, not emerging startups.
 
 Return ONLY a raw JSON array of query strings, no markdown, no code fences."""
 
@@ -177,14 +187,24 @@ Deduplicate by company name (case-insensitive). No markdown, no code fences."""
 
 
 def prefilter_candidates(candidates: list) -> list:
-    personas = ", ".join(ICP["target_personas_in_priority_order"])
+    profile = get_active_profile()
+    firmographic = profile["firmographic"]
+    verticals = ", ".join(firmographic.get("verticals", []))
+    arr_range = firmographic.get("arr_range", "")
+    funding_stage = firmographic.get("funding_stage", "")
+    personas = ", ".join(profile.get("personas", []))
+
+    negative_icp = profile.get("negative_icp", {})
+    exclude_verticals = ", ".join(negative_icp.get("exclude_verticals", [])) or "none"
+    exclude_stages = ", ".join(negative_icp.get("exclude_stages", [])) or "none"
+    exclude_descriptors = ", ".join(negative_icp.get("exclude_descriptors", [])) or "none"
 
     prompt = f"""You are a B2B SaaS go-to-market analyst. Filter the following list of candidate companies against this Ideal Customer Profile and remove obvious non-fits.
 
 ICP:
-- Stage: {ICP["target_stage"]}
-- Vertical: {ICP["target_vertical"]}
-- ARR range: {ICP["target_arr"]}
+- Stage: {funding_stage}
+- Verticals: {verticals}
+- ARR range: {arr_range}
 - Target personas: {personas}
 
 Remove any company that is clearly:
@@ -192,7 +212,12 @@ Remove any company that is clearly:
 - A consumer product with no B2B SaaS angle
 - A non-software business (agency, hardware, marketplace, media)
 - A VC firm, accelerator, or investor (not an operating company)
-- A well-known, household-name company that is obviously well past the Series A stage and a $2M to $10M ARR profile (for example Salesforce, HubSpot, Stripe, Slack, Notion, Figma, GitHub, Snowflake, Databricks, Canva, Zoom, or any similarly large and mature company)
+- A well-known, household-name company that is obviously well past the {funding_stage} stage and a {arr_range} ARR profile (for example Salesforce, HubSpot, Stripe, Slack, Notion, Figma, GitHub, Snowflake, Databricks, Canva, Zoom, or any similarly large and mature company)
+
+NEGATIVE ICP DISQUALIFIERS (drop any candidate that clearly matches one of these):
+- Excluded verticals: {exclude_verticals}
+- Excluded stages: {exclude_stages}
+- Excluded descriptors: {exclude_descriptors}
 
 When in doubt about size or stage, keep the candidate. Only drop companies where it is obvious they do not fit.
 
