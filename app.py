@@ -252,7 +252,7 @@ with tab_research:
                     }
                     for r in breakdown
                 ]
-                st.dataframe(table_rows, use_container_width=True)
+                st.dataframe(table_rows, width="stretch")
 
             st.subheader("Company Intelligence")
             enrichment = brief.get("enrichment") or {}
@@ -299,7 +299,7 @@ with tab_research:
     else:
         display_cols = ["company_name", "domain", "icp_tier", "icp_score", "created_at"]
         rows = [{col: row.get(col) for col in display_cols} for row in history]
-        st.dataframe(rows, use_container_width=True)
+        st.dataframe(rows, width="stretch")
 
 # -- TAB 3: Discover Accounts -------------------------------------------------
 with tab_discover:
@@ -311,25 +311,51 @@ with tab_discover:
         placeholder="e.g. fintech, or funded in the last 6 months",
     )
     limit_input = st.number_input(
-        "How many to qualify", min_value=3, max_value=10, value=5, step=1
+        "How many to qualify", min_value=1, max_value=10, value=5, step=1
     )
-    discover_btn = st.button("Discover Accounts")
+    test_mode = st.checkbox("Test mode (no API calls)")
+
+    btn_col, clear_col = st.columns([2, 1])
+    with btn_col:
+        discover_btn = st.button("Discover Accounts")
+    with clear_col:
+        if "last_discovery" in st.session_state:
+            if st.button("Clear results"):
+                del st.session_state["last_discovery"]
+                st.rerun()
 
     if discover_btn:
-        from src.discovery import discover
+        if test_mode:
+            from src.discovery import mock_discover
+            result = mock_discover(focus=focus_input or None, limit=int(limit_input))
+        else:
+            from src.discovery import discover
+            with st.spinner("Discovering accounts. This takes a couple of minutes..."):
+                result = discover(focus=focus_input or None, limit=int(limit_input))
+        result["profile_name"] = active_row_name_d
+        result["_mock"] = test_mode
+        st.session_state["last_discovery"] = result
 
-        with st.spinner("Discovering accounts. This takes a couple of minutes..."):
-            result = discover(focus=focus_input or None, limit=int(limit_input))
-
+    if "last_discovery" in st.session_state:
+        result = st.session_state["last_discovery"]
         qualified = result.get("qualified", [])
         skipped = result.get("skipped", [])
+        run_profile_name = result.get("profile_name", "unknown")
+        is_mock = result.get("_mock", False)
+
+        if is_mock:
+            st.caption("Showing mock data. No API calls were made.")
 
         if not qualified:
             st.warning("No qualified accounts found. Check the skipped list below.")
         else:
             st.success(
-                f"Found {len(qualified)} qualified account(s). All discovered companies are saved to the accounts database."
+                f"Found {len(qualified)} qualified account(s) for the '{run_profile_name}' profile. All discovered companies are saved to the accounts database."
             )
+            if run_profile_name != active_row_name_d:
+                st.caption(
+                    f"Note: the active profile is now '{active_row_name_d}'. Run discovery again to score against it."
+                )
 
             header_cols = st.columns([1, 1, 3, 3, 2])
             header_cols[0].markdown("**Tier**")

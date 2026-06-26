@@ -296,3 +296,60 @@ def discover(focus: str = None, limit: int = 5) -> dict:
     qualified.sort(key=lambda r: (r.get("icp_score") or 0), reverse=True)
 
     return {"qualified": qualified, "skipped": skipped, "queries": queries}
+
+
+def mock_discover(focus: str = None, limit: int = 5) -> dict:
+    all_qualified = [
+        {
+            "company_name": "Rootly",
+            "domain": "rootly.com",
+            "icp_score": 94,
+            "icp_tier": "A+",
+            "match_confidence": "high",
+        },
+        {
+            "company_name": "Synder",
+            "domain": "synder.com",
+            "icp_score": 81,
+            "icp_tier": "A",
+            "match_confidence": "high",
+        },
+        {
+            "company_name": "Kindo",
+            "domain": "kindo.ai",
+            "icp_score": 76,
+            "icp_tier": "A",
+            "match_confidence": "medium",
+        },
+        {
+            "company_name": "Numra",
+            "domain": "numra.io",
+            "icp_score": 61,
+            "icp_tier": "B",
+            "match_confidence": "medium",
+        },
+        {
+            "company_name": "Vaultree",
+            "domain": "vaultree.com",
+            "icp_score": 55,
+            "icp_tier": "B",
+            "match_confidence": "high",
+        },
+    ]
+    skipped = [
+        {
+            "company_name": "DataBrew",
+            "domain": "databrew.app",
+            "reason": "low match confidence: databrew.app",
+        },
+    ]
+    queries = [
+        "\"Series A\" B2B SaaS startup 2024 funding announcement",
+        "small Series A fintech startup site:techcrunch.com 2024",
+        "\"$5 million Series A\" B2B SaaS 2025",
+    ]
+    return {
+        "qualified": all_qualified[:limit],
+        "skipped": skipped,
+        "queries": queries,
+    }
