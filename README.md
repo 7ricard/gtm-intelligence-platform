@@ -83,12 +83,12 @@ pip install anthropic supabase streamlit requests beautifulsoup4 python-dotenv
 
 ### 3. Configure environment variables
 
-Create a `.env` file in the project root with the following keys (fill in your own values):
+Create a `.env` file in the project root with the following keys:
 
 ```
-ANTHROPIC_API_KEY=your_anthropic_api_key
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_or_service_role_key
+ANTHROPIC_API_KEY=**************
+SUPABASE_URL=**************
+SUPABASE_KEY=**************
 ```
 
 ### 4. Create the Supabase table
