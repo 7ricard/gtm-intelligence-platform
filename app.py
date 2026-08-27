@@ -22,11 +22,127 @@ def _csv_input(label, value_list, key):
     return [v.strip() for v in raw.split(",") if v.strip()]
 
 
-TIER_COLORS = {"A+": "#00a550", "A": "#4caf50", "B": "#ff9800", "C": "#f44336"}
-CONF_COLORS = {"high": "#4caf50", "medium": "#ff9800"}
+def badge(text, bg, fg="#ffffff", font_size="0.95rem", padding="0.15rem 0.65rem"):
+    return (
+        f"<span style='background-color:{bg}; color:{fg}; padding:{padding}; "
+        f"border-radius:999px; font-weight:600; font-size:{font_size}; "
+        f"display:inline-block; line-height:1.5;'>{text}</span>"
+    )
+
+
+def spacer(px=16):
+    st.markdown(f"<div style='height:{px}px'></div>", unsafe_allow_html=True)
+
+
+def muted_label(text):
+    st.markdown(f"<div class='muted-label'>{text}</div>", unsafe_allow_html=True)
+
+
+def score_bar(score):
+    try:
+        pct = max(0, min(100, float(score)))
+    except (TypeError, ValueError):
+        pct = 0
+    if pct >= 70:
+        color = "#4caf50"
+    elif pct >= 40:
+        color = "#ff9800"
+    else:
+        color = "#e0796b"
+    return (
+        f"<div class='score-bar-track'>"
+        f"<div class='score-bar-fill' style='width:{pct}%; background-color:{color};'></div>"
+        f"</div>"
+    )
+
+
+TIER_COLORS = {
+    "A+": {"bg": "#00753a", "fg": "#ffffff"},
+    "A": {"bg": "#4caf50", "fg": "#ffffff"},
+    "B": {"bg": "#ff9800", "fg": "#3a2300"},
+    "C": {"bg": "#e0796b", "fg": "#ffffff"},
+}
+CONF_COLORS = {
+    "high": {"bg": "#4caf50", "fg": "#ffffff"},
+    "medium": {"bg": "#ff9800", "fg": "#3a2300"},
+    "low": {"bg": "#e0796b", "fg": "#ffffff"},
+}
+_DEFAULT_BADGE = {"bg": "#9e9e9e", "fg": "#ffffff"}
 
 st.set_page_config(page_title="GTM Intelligence Platform", layout="wide")
 st.title("GTM Intelligence Platform")
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stMainBlockContainer"] {
+        max-width: 1150px;
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 2rem;
+        padding-right: 2rem;
+        padding-top: 2rem;
+    }
+
+    h2, h3 {
+        margin-top: 1.5rem;
+        margin-bottom: 0.6rem;
+    }
+    h3 {
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #9aa1ac;
+    }
+    [data-testid="stCaptionContainer"] {
+        margin-bottom: 0.75rem;
+    }
+
+    div[class*="st-key-card-"] {
+        background-color: #1A1D24 !important;
+        border: 1px solid rgba(250, 250, 250, 0.10) !important;
+        border-radius: 10px !important;
+        padding: 1.25rem !important;
+        margin-bottom: 1.25rem !important;
+    }
+
+    .muted-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #9aa1ac;
+        margin-bottom: 0.35rem;
+    }
+
+    [data-testid="stMetricValue"] {
+        font-size: 3rem;
+        font-weight: 700;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #9aa1ac;
+    }
+
+    .score-bar-track {
+        background-color: rgba(250, 250, 250, 0.08);
+        border-radius: 999px;
+        height: 8px;
+        width: 100%;
+        overflow: hidden;
+        margin: 0.35rem 0 0.5rem 0;
+    }
+    .score-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 seed_default_profile()
 
@@ -105,19 +221,24 @@ with tab_icp:
         neg_stages = _csv_input("Exclude Stages (comma-separated)", neg.get("exclude_stages", []), f"neg_stages_{pid}")
         neg_descriptors = _csv_input("Exclude Descriptors (comma-separated)", neg.get("exclude_descriptors", []), f"neg_descriptors_{pid}")
 
-        st.subheader("Weights")
-        w_firmographic = st.number_input("firmographic_fit", min_value=0, max_value=100, value=int(weights_data.get("firmographic_fit", 20)), step=1, key=f"w_firmographic_{pid}")
-        w_buying = st.number_input("buying_signals", min_value=0, max_value=100, value=int(weights_data.get("buying_signals", 20)), step=1, key=f"w_buying_{pid}")
-        w_funding = st.number_input("funding_stage", min_value=0, max_value=100, value=int(weights_data.get("funding_stage", 15)), step=1, key=f"w_funding_{pid}")
-        w_industry = st.number_input("industry_fit", min_value=0, max_value=100, value=int(weights_data.get("industry_fit", 15)), step=1, key=f"w_industry_{pid}")
-        w_techno = st.number_input("technographic_fit", min_value=0, max_value=100, value=int(weights_data.get("technographic_fit", 15)), step=1, key=f"w_techno_{pid}")
-        w_persona = st.number_input("persona_accessibility", min_value=0, max_value=100, value=int(weights_data.get("persona_accessibility", 15)), step=1, key=f"w_persona_{pid}")
+        st.subheader("Weights (must total 100)")
+        with st.container(border=True, key="card-weights"):
+            w_firmographic = st.number_input("firmographic_fit", min_value=0, max_value=100, value=int(weights_data.get("firmographic_fit", 20)), step=1, key=f"w_firmographic_{pid}")
+            w_buying = st.number_input("buying_signals", min_value=0, max_value=100, value=int(weights_data.get("buying_signals", 20)), step=1, key=f"w_buying_{pid}")
+            w_funding = st.number_input("funding_stage", min_value=0, max_value=100, value=int(weights_data.get("funding_stage", 15)), step=1, key=f"w_funding_{pid}")
+            w_industry = st.number_input("industry_fit", min_value=0, max_value=100, value=int(weights_data.get("industry_fit", 15)), step=1, key=f"w_industry_{pid}")
+            w_techno = st.number_input("technographic_fit", min_value=0, max_value=100, value=int(weights_data.get("technographic_fit", 15)), step=1, key=f"w_techno_{pid}")
+            w_persona = st.number_input("persona_accessibility", min_value=0, max_value=100, value=int(weights_data.get("persona_accessibility", 15)), step=1, key=f"w_persona_{pid}")
 
-        weight_sum = w_firmographic + w_buying + w_funding + w_industry + w_techno + w_persona
-        if weight_sum == 100:
-            st.caption(f"Weights sum: {weight_sum}")
-        else:
-            st.error(f"Weights must sum to 100. Current sum: {weight_sum}")
+            weight_sum = w_firmographic + w_buying + w_funding + w_industry + w_techno + w_persona
+            sum_color = "#c15f3c" if weight_sum == 100 else "#c62828"
+            st.markdown(
+                f"<div style='margin-top:0.5rem; font-size:1.35rem; font-weight:700; "
+                f"color:{sum_color};'>Weights sum: {weight_sum} / 100</div>",
+                unsafe_allow_html=True,
+            )
+            if weight_sum != 100:
+                st.caption("Weights must total exactly 100 to save.")
 
         st.subheader("Thresholds")
         t_aplus = st.number_input("A+ threshold", min_value=0, max_value=100, value=int(thresholds_data.get("A+", 90)), step=1, key=f"t_aplus_{pid}")
@@ -200,94 +321,103 @@ with tab_research:
             with st.spinner("Researching..."):
                 brief = run_research(company_name, domain)
 
+            spacer(20)
+
             tier = brief.get("icp_tier", "")
-            tier_color = TIER_COLORS.get(tier, "gray")
+            tier_style = TIER_COLORS.get(tier, _DEFAULT_BADGE)
 
-            tier_col, score_col = st.columns([1, 1])
-            with tier_col:
-                st.markdown(
-                    f"**ICP Tier:** <span style='color:{tier_color}; font-size:1.4rem; font-weight:bold'>{tier}</span>",
-                    unsafe_allow_html=True,
-                )
-            with score_col:
-                st.metric("ICP Score", brief.get("icp_score", ""))
+            with st.container(border=True, key="card-score"):
+                score_col, tier_col = st.columns([2, 1])
+                with score_col:
+                    st.metric("ICP Score", brief.get("icp_score", ""))
+                with tier_col:
+                    muted_label("ICP Tier")
+                    st.markdown(
+                        badge(tier, tier_style["bg"], tier_style["fg"], font_size="1.3rem", padding="0.3rem 1rem"),
+                        unsafe_allow_html=True,
+                    )
 
-            st.write(esc(brief.get("summary", "")))
+            with st.container(border=True, key="card-summary"):
+                muted_label("Summary")
+                st.write(esc(brief.get("summary", "")))
 
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.markdown("**ICP Signals**")
-                for item in brief.get("icp_signals", []):
-                    st.markdown(f"- {esc(item)}")
-            with col2:
-                st.markdown("**Pain Points**")
-                for item in brief.get("pain_points", []):
-                    st.markdown(f"- {esc(item)}")
-            with col3:
-                st.markdown("**Tech Stack Signals**")
-                for item in brief.get("tech_stack_signals", []):
-                    st.markdown(f"- {esc(item)}")
+            with st.container(border=True, key="card-signals"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    muted_label("ICP Signals")
+                    for item in brief.get("icp_signals", []):
+                        st.markdown(f"- {esc(item)}")
+                with col2:
+                    muted_label("Pain Points")
+                    for item in brief.get("pain_points", []):
+                        st.markdown(f"- {esc(item)}")
+                with col3:
+                    muted_label("Tech Stack Signals")
+                    for item in brief.get("tech_stack_signals", []):
+                        st.markdown(f"- {esc(item)}")
 
             st.info(esc(brief.get("recommended_angle", "")))
 
             breakdown = brief.get("score_breakdown", [])
             if breakdown:
-                st.subheader("Score Breakdown")
-                for row in breakdown:
-                    dimension_label = row["dimension"].replace("_", " ").title()
-                    score = row["score"]
-                    st.markdown(
-                        f"**{dimension_label}** | Score: {score} | Weight: {row['weight']} | Contribution: {row['contribution']}"
-                    )
-                    st.progress(score / 100)
-                    st.caption(esc(row.get("rationale", "")))
+                with st.container(border=True, key="card-breakdown"):
+                    muted_label("Score Breakdown")
+                    for row in breakdown:
+                        dimension_label = row["dimension"].replace("_", " ").title()
+                        score = row["score"]
+                        st.markdown(
+                            f"**{dimension_label}** | Score: {score} | Weight: {row['weight']} | Contribution: {row['contribution']}"
+                        )
+                        st.markdown(score_bar(score), unsafe_allow_html=True)
+                        st.caption(esc(row.get("rationale", "")))
 
-                table_rows = [
-                    {
-                        "Dimension": r["dimension"].replace("_", " ").title(),
-                        "Score": r["score"],
-                        "Weight": r["weight"],
-                        "Contribution": r["contribution"],
-                        "Rationale": r.get("rationale", ""),
-                    }
-                    for r in breakdown
-                ]
-                st.dataframe(table_rows, width="stretch")
+                    table_rows = [
+                        {
+                            "Dimension": r["dimension"].replace("_", " ").title(),
+                            "Score": r["score"],
+                            "Weight": r["weight"],
+                            "Contribution": r["contribution"],
+                            "Rationale": r.get("rationale", ""),
+                        }
+                        for r in breakdown
+                    ]
+                    st.dataframe(table_rows, width="stretch")
 
-            st.subheader("Company Intelligence")
-            enrichment = brief.get("enrichment") or {}
-            if not enrichment or "error" in enrichment:
-                st.caption("Enrichment unavailable.")
-            else:
-                left, right = st.columns(2)
-                with left:
-                    st.markdown(f"**Funding Stage:** {esc(enrichment.get('funding_stage', 'unknown'))}")
-                    st.markdown(f"**Total Funding Raised:** {esc(enrichment.get('total_funding_raised', 'unknown'))}")
-                    st.markdown(f"**Last Round:** {esc(enrichment.get('last_round', 'unknown'))}")
-                    st.markdown(f"**Revenue / ARR Estimate:** {esc(enrichment.get('revenue_or_arr_estimate', 'unknown'))}")
-                with right:
-                    st.markdown(f"**Employee Count:** {esc(enrichment.get('employee_count', 'unknown'))}")
-                    st.markdown(f"**Founded:** {esc(enrichment.get('founded_year', 'unknown'))}")
-                    st.markdown(f"**HQ Location:** {esc(enrichment.get('hq_location', 'unknown'))}")
-                    st.markdown(f"**Confidence:** {esc(enrichment.get('confidence', 'unknown'))}")
+            with st.container(border=True, key="card-enrichment"):
+                muted_label("Company Intelligence")
+                enrichment = brief.get("enrichment") or {}
+                if not enrichment or "error" in enrichment:
+                    st.caption("Enrichment unavailable.")
+                else:
+                    left, right = st.columns(2)
+                    with left:
+                        st.markdown(f"**Funding Stage:** {esc(enrichment.get('funding_stage', 'unknown'))}")
+                        st.markdown(f"**Total Funding Raised:** {esc(enrichment.get('total_funding_raised', 'unknown'))}")
+                        st.markdown(f"**Last Round:** {esc(enrichment.get('last_round', 'unknown'))}")
+                        st.markdown(f"**Revenue / ARR Estimate:** {esc(enrichment.get('revenue_or_arr_estimate', 'unknown'))}")
+                    with right:
+                        st.markdown(f"**Employee Count:** {esc(enrichment.get('employee_count', 'unknown'))}")
+                        st.markdown(f"**Founded:** {esc(enrichment.get('founded_year', 'unknown'))}")
+                        st.markdown(f"**HQ Location:** {esc(enrichment.get('hq_location', 'unknown'))}")
+                        st.markdown(f"**Confidence:** {esc(enrichment.get('confidence', 'unknown'))}")
 
-                recent_signals = enrichment.get("recent_signals") or []
-                if recent_signals:
-                    st.markdown("**Recent Signals**")
-                    for signal in recent_signals:
-                        st.markdown(f"- {esc(signal)}")
+                    recent_signals = enrichment.get("recent_signals") or []
+                    if recent_signals:
+                        st.markdown("**Recent Signals**")
+                        for signal in recent_signals:
+                            st.markdown(f"- {esc(signal)}")
 
-                personas_found = enrichment.get("target_personas_found") or []
-                if personas_found:
-                    st.markdown("**Buyers Identified**")
-                    for persona in personas_found:
-                        st.markdown(f"- {esc(persona)}")
+                    personas_found = enrichment.get("target_personas_found") or []
+                    if personas_found:
+                        st.markdown("**Buyers Identified**")
+                        for persona in personas_found:
+                            st.markdown(f"- {esc(persona)}")
 
-                sources = enrichment.get("sources") or []
-                if sources:
-                    st.markdown("**Sources**")
-                    for url in sources:
-                        st.markdown(f"- [{url}]({url})")
+                    sources = enrichment.get("sources") or []
+                    if sources:
+                        st.markdown("**Sources**")
+                        for url in sources:
+                            st.markdown(f"- [{url}]({url})")
 
             st.success(f"Account saved (id: {brief.get('saved_id')})")
 
@@ -337,6 +467,8 @@ with tab_discover:
         st.session_state["last_discovery"] = result
 
     if "last_discovery" in st.session_state:
+        spacer(20)
+
         result = st.session_state["last_discovery"]
         qualified = result.get("qualified", [])
         skipped = result.get("skipped", [])
@@ -357,37 +489,42 @@ with tab_discover:
                     f"Note: the active profile is now '{active_row_name_d}'. Run discovery again to score against it."
                 )
 
-            header_cols = st.columns([1, 1, 3, 3, 2])
-            header_cols[0].markdown("**Tier**")
-            header_cols[1].markdown("**ICP Score**")
-            header_cols[2].markdown("**Company**")
-            header_cols[3].markdown("**Domain**")
-            header_cols[4].markdown("**Match Confidence**")
+            with st.container(border=True, key="card-results"):
+                header_cols = st.columns([1, 1, 3, 3, 2])
+                header_cols[0].markdown("<div class='muted-label'>Tier</div>", unsafe_allow_html=True)
+                header_cols[1].markdown("<div class='muted-label'>ICP Score</div>", unsafe_allow_html=True)
+                header_cols[2].markdown("<div class='muted-label'>Company</div>", unsafe_allow_html=True)
+                header_cols[3].markdown("<div class='muted-label'>Domain</div>", unsafe_allow_html=True)
+                header_cols[4].markdown("<div class='muted-label'>Match Confidence</div>", unsafe_allow_html=True)
 
-            st.divider()
+                st.divider()
 
-            for row in qualified:
-                tier = row.get("icp_tier", "")
-                score = row.get("icp_score", "")
-                company = esc(row.get("company_name", ""))
-                domain = row.get("domain", "")
-                conf = row.get("match_confidence", "")
+                for row in qualified:
+                    tier = row.get("icp_tier", "")
+                    score = row.get("icp_score", "")
+                    company = esc(row.get("company_name", ""))
+                    domain = row.get("domain", "")
+                    conf = row.get("match_confidence", "")
 
-                tier_color = TIER_COLORS.get(tier, "gray")
-                conf_color = CONF_COLORS.get(conf, "gray")
+                    tier_style = TIER_COLORS.get(tier, _DEFAULT_BADGE)
+                    conf_style = CONF_COLORS.get(conf, _DEFAULT_BADGE)
 
-                row_cols = st.columns([1, 1, 3, 3, 2])
-                row_cols[0].markdown(
-                    f"<span style='color:{tier_color}; font-weight:bold; font-size:1.1rem'>{tier}</span>",
-                    unsafe_allow_html=True,
-                )
-                row_cols[1].markdown(str(score))
-                row_cols[2].markdown(company)
-                row_cols[3].markdown(f"[{domain}](https://{domain})")
-                row_cols[4].markdown(
-                    f"<span style='color:{conf_color}'>{conf}</span>",
-                    unsafe_allow_html=True,
-                )
+                    row_cols = st.columns([1, 1, 3, 3, 2])
+                    row_cols[0].markdown(
+                        badge(tier, tier_style["bg"], tier_style["fg"]),
+                        unsafe_allow_html=True,
+                    )
+                    row_cols[1].markdown(
+                        f"<span style='font-weight:700; font-size:1.15rem'>{score}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    row_cols[2].markdown(f"**{company}**")
+                    row_cols[3].markdown(f"[{domain}](https://{domain})")
+                    row_cols[4].markdown(
+                        badge(conf, conf_style["bg"], conf_style["fg"], font_size="0.8rem", padding="0.1rem 0.5rem"),
+                        unsafe_allow_html=True,
+                    )
+                    spacer(10)
 
         if skipped:
             with st.expander(f"Skipped ({len(skipped)})"):

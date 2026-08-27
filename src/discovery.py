@@ -322,18 +322,18 @@ def mock_discover(focus: str = None, limit: int = 5) -> dict:
             "match_confidence": "medium",
         },
         {
-            "company_name": "Numra",
-            "domain": "numra.io",
-            "icp_score": 61,
-            "icp_tier": "B",
-            "match_confidence": "medium",
-        },
-        {
             "company_name": "Vaultree",
             "domain": "vaultree.com",
-            "icp_score": 55,
+            "icp_score": 58,
             "icp_tier": "B",
             "match_confidence": "high",
+        },
+        {
+            "company_name": "Ledgerbase",
+            "domain": "ledgerbase.io",
+            "icp_score": 42,
+            "icp_tier": "C",
+            "match_confidence": "medium",
         },
     ]
     skipped = [
