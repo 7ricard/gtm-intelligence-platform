@@ -1,3 +1,5 @@
+import ast
+
 import streamlit as st
 
 from src.agent import run_research
@@ -16,9 +18,30 @@ def esc(text):
     return str(text).replace("$", "\\$")
 
 
+def clean_text_field(value):
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (ValueError, SyntaxError):
+                parsed = stripped[1:-1].strip()
+                if len(parsed) >= 2 and parsed[0] == parsed[-1] and parsed[0] in ("'", '"'):
+                    parsed = parsed[1:-1]
+            value = parsed
+
+    if isinstance(value, list):
+        if len(value) == 1:
+            value = value[0]
+        else:
+            value = " ".join(str(v) for v in value)
+
+    return value
+
+
 def _csv_input(label, value_list, key):
     current = ", ".join(value_list) if value_list else ""
-    raw = st.text_input(label, value=current, key=key)
+    raw = st.text_input(label, value=current, key=key, autocomplete="off")
     return [v.strip() for v in raw.split(",") if v.strip()]
 
 
@@ -43,9 +66,9 @@ def score_bar(score):
         pct = max(0, min(100, float(score)))
     except (TypeError, ValueError):
         pct = 0
-    if pct >= 70:
+    if pct >= 80:
         color = "#4caf50"
-    elif pct >= 40:
+    elif pct >= 50:
         color = "#ff9800"
     else:
         color = "#e0796b"
@@ -197,68 +220,69 @@ with tab_icp:
 
     pid = selected_id
 
-    with st.form("profile_form"):
-        st.subheader("Firmographic")
-        f_verticals = _csv_input("Verticals (comma-separated)", firm.get("verticals", []), f"f_verticals_{pid}")
-        f_arr_range = st.text_input("ARR Range", value=firm.get("arr_range", ""), key=f"f_arr_range_{pid}")
-        f_funding_stage = st.text_input("Funding Stage", value=firm.get("funding_stage", ""), key=f"f_funding_stage_{pid}")
-        f_business_model = st.text_input("Business Model", value=firm.get("business_model", ""), key=f"f_business_model_{pid}")
-        f_employee_range = st.text_input("Employee Range", value=firm.get("employee_range", ""), key=f"f_employee_range_{pid}")
-        f_geographies = _csv_input("Geographies (comma-separated)", firm.get("geographies", []), f"f_geographies_{pid}")
+    st.subheader("Firmographic")
+    f_verticals = _csv_input("Verticals (comma-separated)", firm.get("verticals", []), f"f_verticals_{pid}")
+    f_arr_range = st.text_input("ARR Range", value=firm.get("arr_range", ""), key=f"f_arr_range_{pid}", autocomplete="off")
+    f_funding_stage = st.text_input("Funding Stage", value=firm.get("funding_stage", ""), key=f"f_funding_stage_{pid}", autocomplete="off")
+    f_business_model = st.text_input("Business Model", value=firm.get("business_model", ""), key=f"f_business_model_{pid}", autocomplete="off")
+    f_employee_range = st.text_input("Employee Range", value=firm.get("employee_range", ""), key=f"f_employee_range_{pid}", autocomplete="off")
+    f_geographies = _csv_input("Geographies (comma-separated)", firm.get("geographies", []), f"f_geographies_{pid}")
 
-        st.subheader("Technographic")
-        t_stack = _csv_input("Target Stack (comma-separated)", tech.get("target_stack", []), f"t_stack_{pid}")
-        t_competitors = _csv_input("Competitors to Displace (comma-separated)", tech.get("competitors_to_displace", []), f"t_competitors_{pid}")
+    st.subheader("Technographic")
+    t_stack = _csv_input("Target Stack (comma-separated)", tech.get("target_stack", []), f"t_stack_{pid}")
+    t_competitors = _csv_input("Competitors to Displace (comma-separated)", tech.get("competitors_to_displace", []), f"t_competitors_{pid}")
 
-        st.subheader("Personas")
-        personas = _csv_input("Personas in priority order (comma-separated)", p.get("personas", []), f"personas_{pid}")
+    st.subheader("Personas")
+    personas = _csv_input("Personas in priority order (comma-separated)", p.get("personas", []), f"personas_{pid}")
 
-        st.subheader("Positive Signals")
-        positive_signals = _csv_input("Positive Signals (comma-separated)", p.get("positive_signals", []), f"positive_signals_{pid}")
+    st.subheader("Positive Signals")
+    positive_signals = _csv_input("Positive Signals (comma-separated)", p.get("positive_signals", []), f"positive_signals_{pid}")
 
-        st.subheader("Negative ICP")
-        neg_verticals = _csv_input("Exclude Verticals (comma-separated)", neg.get("exclude_verticals", []), f"neg_verticals_{pid}")
-        neg_stages = _csv_input("Exclude Stages (comma-separated)", neg.get("exclude_stages", []), f"neg_stages_{pid}")
-        neg_descriptors = _csv_input("Exclude Descriptors (comma-separated)", neg.get("exclude_descriptors", []), f"neg_descriptors_{pid}")
+    st.subheader("Negative ICP")
+    neg_verticals = _csv_input("Exclude Verticals (comma-separated)", neg.get("exclude_verticals", []), f"neg_verticals_{pid}")
+    neg_stages = _csv_input("Exclude Stages (comma-separated)", neg.get("exclude_stages", []), f"neg_stages_{pid}")
+    neg_descriptors = _csv_input("Exclude Descriptors (comma-separated)", neg.get("exclude_descriptors", []), f"neg_descriptors_{pid}")
 
-        st.subheader("Weights (must total 100)")
-        with st.container(border=True, key="card-weights"):
-            w_firmographic = st.number_input("firmographic_fit", min_value=0, max_value=100, value=int(weights_data.get("firmographic_fit", 20)), step=1, key=f"w_firmographic_{pid}")
-            w_buying = st.number_input("buying_signals", min_value=0, max_value=100, value=int(weights_data.get("buying_signals", 20)), step=1, key=f"w_buying_{pid}")
-            w_funding = st.number_input("funding_stage", min_value=0, max_value=100, value=int(weights_data.get("funding_stage", 15)), step=1, key=f"w_funding_{pid}")
-            w_industry = st.number_input("industry_fit", min_value=0, max_value=100, value=int(weights_data.get("industry_fit", 15)), step=1, key=f"w_industry_{pid}")
-            w_techno = st.number_input("technographic_fit", min_value=0, max_value=100, value=int(weights_data.get("technographic_fit", 15)), step=1, key=f"w_techno_{pid}")
-            w_persona = st.number_input("persona_accessibility", min_value=0, max_value=100, value=int(weights_data.get("persona_accessibility", 15)), step=1, key=f"w_persona_{pid}")
+    st.subheader("Weights (must total 100)")
+    with st.container(border=True, key="card-weights"):
+        w_firmographic = st.number_input("firmographic_fit", min_value=0, max_value=100, value=int(weights_data.get("firmographic_fit", 20)), step=1, key=f"w_firmographic_{pid}")
+        w_buying = st.number_input("buying_signals", min_value=0, max_value=100, value=int(weights_data.get("buying_signals", 20)), step=1, key=f"w_buying_{pid}")
+        w_funding = st.number_input("funding_stage", min_value=0, max_value=100, value=int(weights_data.get("funding_stage", 15)), step=1, key=f"w_funding_{pid}")
+        w_industry = st.number_input("industry_fit", min_value=0, max_value=100, value=int(weights_data.get("industry_fit", 15)), step=1, key=f"w_industry_{pid}")
+        w_techno = st.number_input("technographic_fit", min_value=0, max_value=100, value=int(weights_data.get("technographic_fit", 15)), step=1, key=f"w_techno_{pid}")
+        w_persona = st.number_input("persona_accessibility", min_value=0, max_value=100, value=int(weights_data.get("persona_accessibility", 15)), step=1, key=f"w_persona_{pid}")
 
-            weight_sum = w_firmographic + w_buying + w_funding + w_industry + w_techno + w_persona
-            sum_color = "#c15f3c" if weight_sum == 100 else "#c62828"
-            st.markdown(
-                f"<div style='margin-top:0.5rem; font-size:1.35rem; font-weight:700; "
-                f"color:{sum_color};'>Weights sum: {weight_sum} / 100</div>",
-                unsafe_allow_html=True,
-            )
-            if weight_sum != 100:
-                st.caption("Weights must total exactly 100 to save.")
+        weight_sum = w_firmographic + w_buying + w_funding + w_industry + w_techno + w_persona
+        sum_color = "#4caf50" if weight_sum == 100 else "#c62828"
+        st.markdown(
+            f"<div style='margin-top:0.5rem; font-size:1.35rem; font-weight:700; "
+            f"color:{sum_color};'>Weights sum: {weight_sum} / 100</div>",
+            unsafe_allow_html=True,
+        )
+        if weight_sum != 100:
+            st.caption("Weights must total exactly 100 to save.")
 
-        st.subheader("Thresholds")
-        t_aplus = st.number_input("A+ threshold", min_value=0, max_value=100, value=int(thresholds_data.get("A+", 90)), step=1, key=f"t_aplus_{pid}")
-        t_a = st.number_input("A threshold", min_value=0, max_value=100, value=int(thresholds_data.get("A", 75)), step=1, key=f"t_a_{pid}")
-        t_b = st.number_input("B threshold", min_value=0, max_value=100, value=int(thresholds_data.get("B", 50)), step=1, key=f"t_b_{pid}")
+    st.subheader("Thresholds")
+    t_aplus = st.number_input("A+ threshold", min_value=0, max_value=100, value=int(thresholds_data.get("A+", 90)), step=1, key=f"t_aplus_{pid}")
+    t_a = st.number_input("A threshold", min_value=0, max_value=100, value=int(thresholds_data.get("A", 75)), step=1, key=f"t_a_{pid}")
+    t_b = st.number_input("B threshold", min_value=0, max_value=100, value=int(thresholds_data.get("B", 50)), step=1, key=f"t_b_{pid}")
 
-        st.divider()
-        new_profile_name = st.text_input("New profile name (for Save as New)", key="new_profile_name")
+    st.divider()
+    new_profile_name = st.text_input("New profile name (for Save as New)", key="new_profile_name", autocomplete="off")
 
-        save_col, saveas_col = st.columns(2)
-        with save_col:
-            save_btn = st.form_submit_button(
-                "Save Changes",
-                disabled=(weight_sum != 100),
-            )
-        with saveas_col:
-            saveas_btn = st.form_submit_button(
-                "Save as New Profile",
-                disabled=(weight_sum != 100),
-            )
+    save_col, saveas_col = st.columns(2)
+    with save_col:
+        save_btn = st.button(
+            "Save Changes",
+            disabled=(weight_sum != 100),
+            key="save_changes_btn",
+        )
+    with saveas_col:
+        saveas_btn = st.button(
+            "Save as New Profile",
+            disabled=(weight_sum != 100),
+            key="save_as_new_btn",
+        )
 
     if save_btn or saveas_btn:
         updated_profile = {
@@ -310,8 +334,8 @@ with tab_research:
     st.caption(f"Scoring against active profile: **{active_row_name}**")
 
     with st.form("research_form"):
-        company_name = st.text_input("Company Name")
-        domain = st.text_input("Domain", placeholder="stripe.com")
+        company_name = st.text_input("Company Name", autocomplete="off")
+        domain = st.text_input("Domain", placeholder="stripe.com", autocomplete="off")
         submitted = st.form_submit_button("Research Account")
 
     if submitted:
@@ -356,7 +380,7 @@ with tab_research:
                     for item in brief.get("tech_stack_signals", []):
                         st.markdown(f"- {esc(item)}")
 
-            st.info(esc(brief.get("recommended_angle", "")))
+            st.info(esc(clean_text_field(brief.get("recommended_angle", ""))))
 
             breakdown = brief.get("score_breakdown", [])
             if breakdown:
@@ -439,6 +463,7 @@ with tab_discover:
     focus_input = st.text_input(
         "Focus (optional)",
         placeholder="e.g. fintech, or funded in the last 6 months",
+        autocomplete="off",
     )
     limit_input = st.number_input(
         "How many to qualify", min_value=1, max_value=10, value=5, step=1
